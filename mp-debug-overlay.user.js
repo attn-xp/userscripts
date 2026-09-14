@@ -1,11 +1,11 @@
 // ==UserScript==
 // @name         Merchant Portal Debug Overlay
 // @namespace    https://github.com/attn-xplor/userscripts
-// @version      1.0.3
+// @version      1.0.4
 // @description  Live stats overlay showing debug information. For example, information pertaining to the selected terminal's vt token.
 // @author       Ismael J Lopez
-// @match        http://localhost:4200/*
-// @match        https://*.clearent.net/*
+// @match        http://localhost:4200/ui/*
+// @match        https://*.clearent.net/ui/*
 // @run-at       document-idle
 // @grant        none
 // ==/UserScript==
