@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Merchant Portal Debug Overlay
 // @namespace    https://github.com/attn-xplor/userscripts
-// @version      2.0.0
+// @version      2.0.1
 // @description  Tabbed Merchant Portal tools for terminals, merchants, Okta, caches, and module federation overrides. Fully vibe-coded.
 // @author       Ismael J Lopez
 // @match        http://localhost:4200/ui/*
@@ -1310,7 +1310,7 @@
     bar.append(
       tabs,
       makeFontControls(),
-      makeButton("", cycleMode, "Minimize (cycle views)"),
+      makeButton("⬋", cycleMode, "Minimize (cycle views)"),
       expand,
     );
 
