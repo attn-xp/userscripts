@@ -1,11 +1,12 @@
 // ==UserScript==
-// @name        Okta Utilities
+// @name        Okta Utilities (Deprecated)
 // @namespace   https://github.com/attn-xplor/userscripts
+// @description Deprecated: use the Okta tab in Merchant Portal Debug Overlay.
 // @match       https://my*.clearent.net/ui/*
 // @match       http://localhost:4200/*
 // @grant       GM.registerMenuCommand
 // @grant       GM.setClipboard
-// @version     1.2
+// @version     1.3
 // @author      Ismael Lopez
 // ==/UserScript==
 

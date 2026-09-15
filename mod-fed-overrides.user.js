@@ -1,10 +1,11 @@
 // ==UserScript==
-// @name        Module Federation Overrides
+// @name        Module Federation Overrides (Deprecated)
 // @namespace   https://github.com/attn-xplor/userscripts
+// @description Deprecated: use the NF tab in Merchant Portal Debug Overlay.
 // @match       https://*.clearent.net/*
 // @match       http://localhost:4200/*
 // @grant       GM.registerMenuCommand
-// @version     1.1.0
+// @version     1.2.0
 // @author      Ismael J Lopez
 // @run-at      document-idle
 // ==/UserScript==

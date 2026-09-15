@@ -1,12 +1,13 @@
 // ==UserScript==
-// @name        Cache Utilities
+// @name        Cache Utilities (Deprecated)
 // @namespace   https://github.com/attn-xplor/userscripts
+// @description Deprecated: use the Cache tab in Merchant Portal Debug Overlay.
 // @match       https://my*.clearent.net/ui/*
 // @match       http://localhost:4200/*
 // @grant       GM.registerMenuCommand
 // @grant       GM.getValue
 // @grant       GM.setValue
-// @version     1.4.1
+// @version     1.5.0
 // @author      Ismael Lopez
 // ==/UserScript==
 
@@ -18,6 +19,8 @@ const DEFAULT_EXCLUSIONS = [
   'TanstackQueryDevtools.theme_preference',
   'xplor.debug.overlay.position',
   'xplor.debug.overlay.mode',
+  'xplor.debug.overlay.tab',
+  'xplor.debug.overlay.font',
 ];
 
 GM.registerMenuCommand('Clear Session', () => {

@@ -12,7 +12,7 @@ Get the Violentmonkey userscript manager here: https://violentmonkey.github.io/g
 ### [Automatic override toggle](//github.com/attn-xplor/userscripts/raw/refs/heads/trunk/auto-overrides.user.js)
 Automatically turns on Single Spa for any MFEs you are actively running locally. Uses the cached import map and checks if something is running on that port. Useful most of the time except for A-B testing, but that is why you can toggle it on/off in the first place.
 
-### [Module Federation Overrides](//github.com/attn-xplor/userscripts/raw/refs/heads/trunk/mod-fed-overrides.user.js)
+### Module Federation Overrides (deprecated)
 The Native Federation counterpart to the Single SPA script above. `merchant-host-ui`
 reads `MOD_FED_APPLICATION_OVERRIDES` from `localStorage` to decide which remotes
 to pull from a local dev server, but the key starts out empty, so pointing an MFE
@@ -33,13 +33,10 @@ Entries that already look right are left alone, so a hand-edited URL or an enabl
 remote survives. Extra entries you add in the editor (or by hand) still show up
 and can be removed later.
 
-#### Usage
-Pick `Edit MFE overrides` from the Violentmonkey menu to open a checkbox and URL
-field per MFE. Use **Add** to register another remote by name and URL. Saving
-offers to reload, because the host reads the key during pre-bootstrap: a change
-only takes effect on the next page load. That is also why the first run seeds
-silently — the entries are disabled, so they cannot affect the page you are
-already on.
+This utility is now the **NF** tab in the Merchant Portal Debug Overlay.
+Use **Add** to register another remote by name and URL. Saving offers to reload,
+because the host reads the key during pre-bootstrap: a change only takes effect
+on the next page load. The first run seeds silently with all entries disabled.
 
 Overrides work best against `localhost:4200`. On an HTTPS host the browser may
 block `http://localhost` remotes as mixed content, so the editor warns when you
@@ -57,41 +54,63 @@ This opens a modal where you can edit a JSON document that serves as the "patch"
 The userscript will *merge* your patch with the main config: properties from the patch will replace values in the normal config when both are present.
 (Sub-objects get merged recursively.)
 
-### [Okta Utilities](//github.com/attn-xplor/userscripts/raw/refs/heads/trunk/okta-utils.user.js)
-Copies your current Okta Access Token to your clipboard. Useful for Postman requests where you need a Bearer token.
+### Okta Utilities (deprecated)
+This utility is now the **Okta** tab in the Merchant Portal Debug Overlay.
 
-### [Cache Utilities](//github.com/attn-xplor/userscripts/raw/refs/heads/trunk/cache-utils.user.js)
-Utilities for clearing browser storage while leaving your module federation
-application overrides (`MOD_FED_APPLICATION_OVERRIDES`) and TanStack Query Devtools
-preferences intact. Use `Edit Local Exclusions` from the Violentmonkey menu to
-preserve additional `localStorage` keys.
+### Cache Utilities (deprecated)
+These utilities are now the **Cache** tab in the Merchant Portal Debug Overlay.
 
-### [HNK Utilities](//github.com/attn-xplor/userscripts/raw/refs/heads/trunk/hnk-utils.user.js)
-Merchant Portal's merchant selector makes it hard to copy the currently-selected
-merchant's DBA and/or HNK. This script copies that information to your clipboard.
+### HNK Utilities (deprecated)
+These utilities are now the **Merchant** tab in the Merchant Portal Debug Overlay.
 
 ### [Jira](//github.com/attn-xplor/userscripts/raw/refs/heads/trunk/jira.user.js)
 Copies the ticket number (e.g., ITSM-12345) and url as a markdown-friendly link to your clipboard. 
 This is useful for our Merchant Portal MFE Pull Request templates.
 
 ### [Merchant Portal Debug Overlay](//github.com/attn-xplor/userscripts/raw/refs/heads/trunk/mp-debug-overlay.user.js)
-A live debug overlay for Merchant Portal (`localhost:4200` and
-`*.clearent.net`). It is meant to grow with whatever metrics or cache
-state we need on-screen; today it only covers virtual-terminal (VT)
-token information — the current need.
+A developer overlay for Merchant Portal (`localhost:4200` and
+`*.clearent.net`). Its expanded view is tabbed:
 
-The VT view reads the selected terminal from the `xplor.*` session and
-local storage caches (and compares them against the legacy cache
-entries still written alongside them).
+- **Terminal** — selected terminal, expandable terminal list, token timers,
+  ACH/RPS capability indicators, and legacy-cache match checks.
+- **Merchant** — the selected merchant's DBA, HNK, and the combined display
+  string, each with a copy button, followed by cached frontend feature
+  availability in a ten-row scrolling list.
+- **Okta** — the current bearer token, shortened to the issuer row's length,
+  copied in full, and refreshed after silent renewal. Full-screen mode displays
+  the complete token. Decoded JWT details include a live expiry countdown,
+  issued time, user, subject, issuer, audience, and scopes when available.
+- **Cache** — collapsed `localStorage` and `sessionStorage` views with
+  grouped, syntax-coloured JSON. Every value has adjacent copy and inline edit
+  controls for primitive fields, while objects and arrays can be folded and
+  copied as a unit. Cache-entry timestamps (`updatedAt`, `iat`, `exp`,
+  `expires_at`, `expirationDate`, and the like) receive live-updating blue
+  relative-time annotations; payload dates such as `createdDate` are left
+  alone. Cache clearing and the local exclusions editor are included.
+- **NF** — enables, edits, adds, and removes Native Federation overrides,
+  with the same validation and reload prompt as the deprecated standalone tool.
+  Local URLs receive an informational server-status probe; a stopped server
+  does not prevent saving.
 
 #### Usage
-Drag the overlay to move it. Click it to cycle views: **compact** (`E`
-expiry / `S` stale countdowns), **detail** (terminal name, expiry,
-stale, and cache age), and **panel** (selected terminal, expandable
-terminal list, timers, and legacy-cache match checks).
+Drag the overlay to move it. Clicking the collapsed overlay cycles views:
+**compact** (`E` expiry / `S` stale countdowns) and **detail** (terminal name,
+expiry, stale, and cache age) are single-line pills, and **panel** is the
+tabbed view above. Only the panel has tabs; its `⇲⇱` button collapses back to
+the compact pill, and the `⛶` button beside it fills the window (24px gutters)
+so long cache values have room. Full screen is per-session rather than
+remembered, and dragging is disabled while it is on. The `− AA +` control next
+to them scales the overlay text between 9px and 20px.
 
-Position and view mode are remembered in `localStorage`. The status
-dot turns amber under two minutes remaining and red once expired.
+Within a tab, labels and values share columns so values line up down the
+panel, and countdowns are zero-padded to keep the colon in place. The Merchant
+features list keeps its checkmarks hugging each feature name instead.
+
+Position, selected tab, view mode, and text size are remembered in
+`localStorage`. The
+status dot turns amber under two minutes remaining and red once expired. Long
+values are truncated with `...` on screen, while copy buttons always place the
+full value on the clipboard.
 
 ### [ngDevMode Patch](//github.com/attn-xplor/userscripts/raw/refs/heads/trunk/ng-dev-mode-patch.user.js)
 Works around `ReferenceError: ngDevMode is not defined` when running MFEs under
