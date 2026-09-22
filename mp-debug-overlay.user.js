@@ -1,18 +1,19 @@
 // ==UserScript==
 // @name         Merchant Portal Debug Overlay
 // @namespace    https://github.com/attn-xplor/userscripts
-// @version      2.2.0
-// @description  Tabbed Merchant Portal tools for terminals, merchants, Okta, caches, and module federation overrides. Fully vibe-coded.
+// @version      2.3.0
+// @description  Tabbed Merchant Portal tools for terminals, merchants, Okta, caches, module federation overrides, and the ngDevMode patch. Fully vibe-coded.
 // @author       Ismael J Lopez
 // @match        http://localhost:4200/ui/*
 // @match        https://*.clearent.net/ui/*
-// @run-at       document-idle
+// @run-at       document-start
 // @connect      localhost
 // @connect      127.0.0.1
 // @grant        GM.getValue
 // @grant        GM.setClipboard
 // @grant        GM.setValue
 // @grant        GM.xmlHttpRequest
+// @grant        unsafeWindow
 // ==/UserScript==
 (function () {
   "use strict";
@@ -43,11 +44,12 @@
   const MODE_KEY = "xplor.debug.overlay.mode";
   const TAB_KEY = "xplor.debug.overlay.tab";
   const FONT_KEY = "xplor.debug.overlay.font";
+  const NG_DEV_MODE_KEY = "xplor.debug.overlay.ngDevMode";
   const FONT_DEFAULT_PX = 12;
   const FONT_MIN_PX = 9;
   const FONT_MAX_PX = 20;
   const MODES = ["compact", "detail", "panel"];
-  const TABS = ["Terminal", "Merchant", "Okta", "Cache", "NF"];
+  const TABS = ["Terminal", "Merchant", "Okta", "Cache", "NF", "Angular"];
   const LEGACY_TAB_NAMES = {
     "Virtual Terminal": "Terminal",
     HNK: "Merchant",
@@ -101,6 +103,7 @@
     MODE_KEY,
     TAB_KEY,
     FONT_KEY,
+    NG_DEV_MODE_KEY,
   ];
 
   const GREEN = "#7bdcb5";
@@ -119,6 +122,34 @@
     { id: "application", label: "Other", color: GREEN },
     { id: "overlay", label: "Debug Overlay", color: ORANGE },
   ];
+
+  // The page's own globals, not the userscript sandbox's copy of them.
+  const pageWindow = typeof unsafeWindow === "undefined" ? window : unsafeWindow;
+
+  function ngDevModeEnabled() {
+    return localStorage.getItem(NG_DEV_MODE_KEY) === "true";
+  }
+
+  // Angular's compiler emits bare `ngDevMode` references, and Native
+  // Federation's dev builds don't always hand esbuild a `define` for it, so a
+  // remote chunk that evaluates one first throws `ngDevMode is not defined`.
+  // Defining it is what a normal Angular dev build does, but it also pushes a
+  // production build onto its dev-mode code paths, hence the opt-in.
+  function applyNgDevModePatch() {
+    if (!ngDevModeEnabled() || pageWindow.ngDevMode !== undefined) return false;
+    try {
+      pageWindow.ngDevMode = {};
+      return true;
+    } catch (error) {
+      console.error("[DebugOverlay] Could not define ngDevMode", error);
+      return false;
+    }
+  }
+
+  // Read before the tab can change the setting: the patch only lands at
+  // document-start, so toggling it applies on the next load rather than now.
+  const ngDevModeEnabledAtBoot = ngDevModeEnabled();
+  const ngDevModeSetByOverlay = applyNgDevModePatch();
 
   function parseItem(storage, key) {
     const raw = storage.getItem(key);
@@ -1968,6 +1999,59 @@
     refs.content.appendChild(actions);
   }
 
+  function buildAngular() {
+    const hint = document.createElement("div");
+    hint.style.opacity = ".7";
+    hint.textContent =
+      "Defines window.ngDevMode as an empty object before the app boots, " +
+      'which clears "ngDevMode is not defined" in Native Federation dev ' +
+      "builds. Leave it off against a production build, where Angular reads " +
+      "the flag to turn on dev-mode code paths.";
+    refs.content.appendChild(hint);
+
+    const toggle = document.createElement("label");
+    toggle.setAttribute("data-no-drag", "");
+    toggle.style.cssText =
+      "display:flex;gap:8px;align-items:center;cursor:pointer;margin-top:3px";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = ngDevModeEnabled();
+    checkbox.onchange = () => {
+      localStorage.setItem(NG_DEV_MODE_KEY, String(checkbox.checked));
+      render();
+      if (
+        checkbox.checked !== ngDevModeEnabledAtBoot &&
+        confirm("Reload now to apply the ngDevMode patch?")
+      )
+        location.reload();
+    };
+    toggle.append(
+      checkbox,
+      makePlain("Patch window.ngDevMode at document-start"),
+    );
+    refs.content.appendChild(toggle);
+
+    refs.rows = makeAlignedGroup(refs.content);
+    const value = pageWindow.ngDevMode;
+    const state = makeRow(refs.rows, "ngDevMode");
+    state.textContent =
+      value === undefined ? "not defined" : `defined (${typeof value})`;
+    state.style.color = value === undefined ? GREY : GREEN;
+    const source = makeRow(refs.rows, "Defined by");
+    source.textContent = ngDevModeSetByOverlay
+      ? "this overlay"
+      : value === undefined
+        ? "—"
+        : "the page";
+    source.style.color = ngDevModeSetByOverlay ? GREEN : GREY;
+
+    if (ngDevModeEnabled() !== ngDevModeEnabledAtBoot) {
+      const pending = makePlain("Reload to apply this change.");
+      pending.style.color = AMBER;
+      refs.content.appendChild(pending);
+    }
+  }
+
   function structureSignature(data) {
     if (mode !== "panel") return `${mode}|${Boolean(data)}`;
     const panel = `panel|${fullScreen}`;
@@ -1989,6 +2073,8 @@
     }
     if (activeTab === "Okta")
       return `${panel}|${activeTab}|${getAccessToken().token}`;
+    if (activeTab === "Angular")
+      return `${panel}|${activeTab}|${ngDevModeEnabled()}|${typeof pageWindow.ngDevMode}`;
     return `${panel}|${activeTab}|${localStorage.getItem(MOD_FED_OVERRIDES_KEY)}`;
   }
 
@@ -2002,7 +2088,8 @@
       else if (activeTab === "Merchant") buildMerchant();
       else if (activeTab === "Okta") buildOkta();
       else if (activeTab === "Cache") buildCache();
-      else buildModFed();
+      else if (activeTab === "NF") buildModFed();
+      else buildAngular();
       alignLabels(refs.content);
     }
     built = key;
@@ -2099,6 +2186,14 @@
     else if (activeTab === "Cache") updateStorage();
   }
 
-  render();
-  setInterval(render, TICK_MS);
+  function start() {
+    render();
+    setInterval(render, TICK_MS);
+  }
+
+  // The ngDevMode patch has to land at document-start, where there is no
+  // `document.body` for the overlay to attach to yet.
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  else start();
 })();

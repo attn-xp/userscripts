@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name        Cache Utilities (Deprecated)
+// @name        Cache Utilities
 // @namespace   https://github.com/attn-xplor/userscripts
-// @description Deprecated: use the Cache tab in Merchant Portal Debug Overlay.
+// @description Clears browser storage while preserving chosen keys. Also available as the Cache tab in Merchant Portal Debug Overlay.
 // @match       https://my*.clearent.net/ui/*
 // @match       http://localhost:4200/*
 // @grant       GM.registerMenuCommand
@@ -21,6 +21,7 @@ const DEFAULT_EXCLUSIONS = [
   'xplor.debug.overlay.mode',
   'xplor.debug.overlay.tab',
   'xplor.debug.overlay.font',
+  'xplor.debug.overlay.ngDevMode',
 ];
 
 GM.registerMenuCommand('Clear Session', () => {

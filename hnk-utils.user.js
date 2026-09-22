@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name        HNK Utilities (Deprecated)
+// @name        HNK Utilities
 // @namespace   https://github.com/attn-xplor/userscripts
-// @description Deprecated: use the Merchant tab in Merchant Portal Debug Overlay.
+// @description Copies the selected merchant's DBA and HNK. Also available as the Merchant tab in Merchant Portal Debug Overlay.
 // @match       https://my*.clearent.net/ui/*
 // @match       http://localhost:4200/*
 // @grant       GM.registerMenuCommand

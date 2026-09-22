@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name        Module Federation Overrides (Deprecated)
+// @name        Module Federation Overrides
 // @namespace   https://github.com/attn-xplor/userscripts
-// @description Deprecated: use the NF tab in Merchant Portal Debug Overlay.
+// @description Edits the Native Federation remote overrides. Also available as the NF tab in Merchant Portal Debug Overlay.
 // @match       https://*.clearent.net/*
 // @match       http://localhost:4200/*
 // @grant       GM.registerMenuCommand
