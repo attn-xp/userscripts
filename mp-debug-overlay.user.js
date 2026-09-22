@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Merchant Portal Debug Overlay
 // @namespace    https://github.com/attn-xplor/userscripts
-// @version      2.1.0
+// @version      2.1.1
 // @description  Tabbed Merchant Portal tools for terminals, merchants, Okta, caches, and module federation overrides. Fully vibe-coded.
 // @author       Ismael J Lopez
 // @match        http://localhost:4200/ui/*
@@ -131,7 +131,25 @@
     }
   }
 
+  // `xplor.<user>.current.merchant` holds the merchant number the portal is
+  // scoped to, which is the `<hnk>` segment of every other `xplor.*` cache key.
+  function currentMerchant() {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      const match = CURRENT_MERCHANT_KEY.exec(key);
+      if (!match) continue;
+      const hnk = localStorage.getItem(key);
+      if (hnk) return { user: match[1], hnk };
+    }
+    return null;
+  }
+
+  // Switching merchants leaves the previous merchant's terminals behind in
+  // sessionStorage, so the key has to be chosen by hnk rather than by whichever
+  // one is found first. Without a known merchant the newest entry is the best
+  // guess; with one, a missing entry means there is nothing to show yet.
   function readTerminals() {
+    const entries = [];
     for (let i = 0; i < sessionStorage.length; i++) {
       const key = sessionStorage.key(i);
       const match = TERMINALS_KEY_PATTERN.exec(key);
@@ -139,9 +157,19 @@
       const item = parseItem(sessionStorage, key);
       if (!Array.isArray(item?.response) || typeof item.updatedAt !== "number")
         continue;
-      return { hnk: match[1], updatedAt: item.updatedAt, list: item.response };
+      entries.push({
+        hnk: match[1],
+        updatedAt: item.updatedAt,
+        list: item.response,
+      });
     }
-    return null;
+    if (entries.length === 0) return null;
+
+    const hnk = currentMerchant()?.hnk;
+    if (hnk) return entries.find((entry) => entry.hnk === hnk) ?? null;
+    return entries.reduce((latest, entry) =>
+      entry.updatedAt > latest.updatedAt ? entry : latest,
+    );
   }
 
   // The selected terminal is cached separately, in localStorage, so it survives
@@ -175,13 +203,24 @@
     );
   }
 
+  // Legacy caches keep one entry per merchant in a single array, tagged with
+  // `dataHash`, so an unscoped lookup can hand back a previous merchant's entry.
+  // Older entries predate the tag, hence the unscoped fallback.
+  function legacyItemFor(storage, storageKey, itemName, hnk) {
+    return (
+      scopedLegacyItem(storage, storageKey, itemName, hnk) ??
+      legacyItem(storage, storageKey, itemName)
+    );
+  }
+
   function readFeatures(hnk) {
     const modern = parseItem(sessionStorage, featuresKey(hnk))?.response;
     if (Array.isArray(modern)) return modern;
-    const legacy = legacyItem(
+    const legacy = legacyItemFor(
       sessionStorage,
       LEGACY_SESSION_KEY,
       LEGACY_FEATURES_ITEM,
+      hnk,
     )?.dataObject;
     return Array.isArray(legacy) ? legacy : [];
   }
@@ -199,10 +238,11 @@
     const modern = parseItem(sessionStorage, achProvidersKey(hnk))?.response;
     if (Array.isArray(modern))
       return modern.some((provider) => provider?.enabled === true);
-    const legacy = legacyItem(
+    const legacy = legacyItemFor(
       sessionStorage,
       LEGACY_SESSION_KEY,
       LEGACY_ACH_ITEM,
+      hnk,
     )?.dataObject?.payload?.["ach-providers"]?.["ach-provider"];
     return Array.isArray(legacy)
       ? legacy.some((provider) => provider?.enabled === true)
@@ -257,10 +297,11 @@
   // Each legacy item is compared against its newer `xplor.*` counterpart, which
   // QuestJwtService writes at the same time, so divergence is visible per item.
   function checkLegacyTerminals(cache) {
-    const item = legacyItem(
+    const item = legacyItemFor(
       sessionStorage,
       LEGACY_SESSION_KEY,
       LEGACY_TERMINALS_ITEM,
+      cache.hnk,
     );
     if (!item?.dataObject) return { ok: false, detail: "missing" };
 
@@ -278,10 +319,11 @@
   }
 
   function checkLegacySelected(cache, selected) {
-    const item = legacyItem(
+    const item = legacyItemFor(
       localStorage,
       LEGACY_LOCAL_KEY,
       LEGACY_SELECTED_ITEM,
+      cache.hnk,
     );
     if (!item?.dataObject) return { ok: false, detail: "missing" };
 
@@ -345,19 +387,13 @@
   }
 
   function fromXplorMerchantCache() {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      const match = CURRENT_MERCHANT_KEY.exec(key);
-      if (!match) continue;
-      const hnk = localStorage.getItem(key);
-      if (!hnk) continue;
-      const list = parseItem(localStorage, merchantsKey(match[1]));
-      const found = Array.isArray(list)
-        ? list.find((merchant) => merchant?.merchantNumber === hnk)
-        : null;
-      return { dba: found?.merchantName || "", hnk };
-    }
-    return null;
+    const current = currentMerchant();
+    if (!current) return null;
+    const list = parseItem(localStorage, merchantsKey(current.user));
+    const found = Array.isArray(list)
+      ? list.find((merchant) => merchant?.merchantNumber === current.hnk)
+      : null;
+    return { dba: found?.merchantName || "", hnk: current.hnk };
   }
 
   function fromLegacyMerchantCache() {
