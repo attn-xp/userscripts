@@ -131,6 +131,11 @@ so long cache values have room. Full screen is per-session rather than
 remembered, and dragging is disabled while it is on. The `− AA +` control next
 to them scales the overlay text between 9px and 20px.
 
+The panel's bottom-right corner has a grip: drag it to resize, and
+double-click it to go back to fitting its contents. A panel sized by hand
+scrolls its body instead of growing, is never narrower than 340px, and is
+remembered across page loads alongside the overlay's position.
+
 Within a tab, labels and values share columns so values line up down the
 panel, and countdowns are zero-padded to keep the colon in place. The Merchant
 features list keeps its checkmarks hugging each feature name instead.

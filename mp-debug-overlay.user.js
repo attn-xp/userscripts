@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Merchant Portal Debug Overlay
 // @namespace    https://github.com/attn-xplor/userscripts
-// @version      2.3.0
+// @version      2.4.0
 // @description  Tabbed Merchant Portal tools for terminals, merchants, Okta, caches, module federation overrides, and the ngDevMode patch. Fully vibe-coded.
 // @author       Ismael J Lopez
 // @match        http://localhost:4200/ui/*
@@ -41,6 +41,7 @@
   const achProvidersKey = (hnk) => `xplor.${hnk}.ach.providers`;
 
   const POS_KEY = "xplor.debug.overlay.position";
+  const SIZE_KEY = "xplor.debug.overlay.size";
   const MODE_KEY = "xplor.debug.overlay.mode";
   const TAB_KEY = "xplor.debug.overlay.tab";
   const FONT_KEY = "xplor.debug.overlay.font";
@@ -59,6 +60,9 @@
   const TERMINAL_LIST_MAX_HEIGHT_PX = 180;
   const STORAGE_LIST_MAX_HEIGHT_PX = 240;
   const EXPANDED_GUTTER_PX = 24;
+  const PANEL_MIN_WIDTH_PX = 340;
+  const PANEL_MIN_HEIGHT_PX = 120;
+  const RESIZE_GRIP_PX = 14;
   const VALUE_MAX_CHARS = 64;
   const OKTA_TOKEN_MAX_CHARS = 20;
   const PREVIEW_MAX_CHARS = 42;
@@ -100,6 +104,7 @@
     "TanstackQueryDevtools.pip_open",
     "TanstackQueryDevtools.theme_preference",
     POS_KEY,
+    SIZE_KEY,
     MODE_KEY,
     TAB_KEY,
     FONT_KEY,
@@ -1015,6 +1020,9 @@
   // come back to on the next page load.
   let fullScreen = false;
   const storageExpanded = { local: false, session: false };
+  // Null until the panel is resized by hand, which is what keeps it sized to
+  // its content until then.
+  let panelSize = readPanelSize();
   let fontSize = readFontSize();
   applyFontSize();
 
@@ -1076,6 +1084,45 @@
     applyPosition(saved.left, saved.top);
   }
 
+  function readPanelSize() {
+    const saved = parseItem(localStorage, SIZE_KEY);
+    if (!Number.isFinite(saved?.width) || !Number.isFinite(saved?.height))
+      return null;
+    return { width: saved.width, height: saved.height };
+  }
+
+  function savePanelSize() {
+    localStorage.setItem(SIZE_KEY, JSON.stringify(panelSize));
+  }
+
+  function isSizedPanel() {
+    return mode === "panel" && !isFullScreen() && panelSize !== null;
+  }
+
+  // The stored size outlives a viewport that no longer fits it, so clamp on
+  // the way out rather than shrinking what was saved.
+  function applyPanelSize() {
+    if (!isSizedPanel()) {
+      overlay.style.width = "";
+      overlay.style.height = "";
+      overlay.style.display = "block";
+      return;
+    }
+    const maxWidth = Math.max(PANEL_MIN_WIDTH_PX, window.innerWidth);
+    const maxHeight = Math.max(PANEL_MIN_HEIGHT_PX, window.innerHeight);
+    overlay.style.width = `${clamp(panelSize.width, PANEL_MIN_WIDTH_PX, maxWidth)}px`;
+    overlay.style.height = `${clamp(panelSize.height, PANEL_MIN_HEIGHT_PX, maxHeight)}px`;
+    overlay.style.display = "flex";
+    overlay.style.flexDirection = "column";
+  }
+
+  function resetPanelSize() {
+    if (!panelSize) return;
+    panelSize = null;
+    localStorage.removeItem(SIZE_KEY);
+    render();
+  }
+
   function applyFullScreen() {
     const gutter = `${EXPANDED_GUTTER_PX}px`;
     overlay.style.transform = "none";
@@ -1100,8 +1147,13 @@
   }
 
   function applyGeometry() {
-    if (isFullScreen()) applyFullScreen();
-    else restorePosition();
+    if (isFullScreen()) {
+      applyFullScreen();
+      return;
+    }
+    // Position clamps against the current size, so size comes first.
+    applyPanelSize();
+    restorePosition();
   }
 
   let drag = null;
@@ -1153,6 +1205,65 @@
 
   overlay.addEventListener("pointerup", endDrag);
   overlay.addEventListener("pointercancel", endDrag);
+
+  let resize = null;
+  function startResize(event) {
+    if (event.button !== 0) return;
+    const rect = overlay.getBoundingClientRect();
+    resize = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originWidth: rect.width,
+      originHeight: rect.height,
+      moved: false,
+    };
+  }
+
+  // Capturing the pointer retargets the click pair to the capturing element,
+  // which would hide the grip's double-click behind the overlay, so a press
+  // only takes the pointer once it turns into an actual drag. Until then the
+  // window hears the moves, since dragging the corner outwards leaves the
+  // overlay immediately.
+  function moveResize(event) {
+    if (!resize || event.pointerId !== resize.pointerId) return;
+    const dx = event.clientX - resize.startX;
+    const dy = event.clientY - resize.startY;
+    if (!resize.moved) {
+      if (dx * dx + dy * dy < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
+      resize.moved = true;
+      // Captured on the overlay, which stays in place while the rebuild
+      // below detaches the grip.
+      overlay.setPointerCapture(resize.pointerId);
+      if (!panelSize) {
+        // First resize: the body has to start scrolling instead of setting
+        // the panel's height, which takes a rebuild.
+        panelSize = { width: resize.originWidth, height: resize.originHeight };
+        render();
+      }
+    }
+    panelSize = {
+      width: resize.originWidth + dx,
+      height: resize.originHeight + dy,
+    };
+    applyPanelSize();
+  }
+
+  function endResize(event) {
+    if (!resize || event.pointerId !== resize.pointerId) return;
+    const resized = resize.moved;
+    resize = null;
+    // A press that never moved is half of a double-click, not a resize.
+    if (!resized) return;
+    // Store what the panel settled on, not a drag that ran past the viewport.
+    panelSize = { width: overlay.offsetWidth, height: overlay.offsetHeight };
+    savePanelSize();
+    applyGeometry();
+  }
+
+  window.addEventListener("pointermove", moveResize);
+  window.addEventListener("pointerup", endResize);
+  window.addEventListener("pointercancel", endResize);
   window.addEventListener("resize", applyGeometry);
 
   function makeDot() {
@@ -1272,6 +1383,36 @@
     return group;
   }
 
+  function makeResizeGrip() {
+    const grip = document.createElement("div");
+    grip.setAttribute("data-no-drag", "");
+    grip.title = "Drag to resize (double-click to fit contents)";
+    grip.style.cssText = [
+      "position:absolute",
+      "right:0",
+      "bottom:0",
+      `width:${RESIZE_GRIP_PX}px`,
+      `height:${RESIZE_GRIP_PX}px`,
+      // Striped corner triangle, rounded to sit inside the panel's own corner.
+      "clip-path:polygon(100% 0,100% 100%,0 100%)",
+      "border-bottom-right-radius:10px",
+      "background:repeating-linear-gradient(135deg,transparent 0 3px,#fff 3px 4px)",
+      "opacity:.5",
+      "cursor:nwse-resize",
+      "touch-action:none",
+    ].join(";");
+    grip.addEventListener("pointerdown", startResize);
+    grip.addEventListener("dblclick", resetPanelSize);
+    grip.addEventListener("pointerenter", () => (grip.style.opacity = "1"));
+    grip.addEventListener("pointerleave", () => (grip.style.opacity = ".5"));
+    return grip;
+  }
+
+  // One node reattached on every rebuild rather than a fresh one each time:
+  // a double-click only registers when both of its clicks land on the same
+  // element, and a rebuild can fall between them.
+  const resizeGrip = makeResizeGrip();
+
   function cycleMode() {
     mode = MODES[(MODES.indexOf(mode) + 1) % MODES.length];
     localStorage.setItem(MODE_KEY, mode);
@@ -1342,7 +1483,8 @@
     bar.style.cssText =
       "display:flex;align-items:center;gap:8px;padding-right:8px;border-bottom:1px solid rgba(255,255,255,.18)";
     const tabs = document.createElement("div");
-    tabs.style.cssText = "display:flex;flex:1";
+    // A hand-narrowed panel clips tabs before it eats the controls beside them.
+    tabs.style.cssText = "display:flex;flex:1;min-width:0;overflow:hidden";
     for (const tab of TABS) {
       const button = document.createElement("button");
       button.type = "button";
@@ -1381,18 +1523,20 @@
       expand,
     );
 
+    const sized = isSizedPanel();
     refs.content = document.createElement("div");
     refs.content.style.cssText = [
       "display:flex",
       "flex-direction:column",
       "gap:5px",
       "padding:9px 12px 11px",
-      fullScreen
+      fullScreen || sized
         ? "flex:1;min-height:0;overflow:auto;overscroll-behavior:contain"
-        : "min-width:340px;max-width:min(620px,90vw)",
+        : `min-width:${PANEL_MIN_WIDTH_PX}px;max-width:min(620px,90vw)`,
     ].join(";");
     if (fullScreen) refs.content.setAttribute("data-no-drag", "");
     overlay.append(bar, refs.content);
+    if (!fullScreen) overlay.appendChild(resizeGrip);
   }
 
   function buildVirtualTerminal(data) {
@@ -2054,7 +2198,7 @@
 
   function structureSignature(data) {
     if (mode !== "panel") return `${mode}|${Boolean(data)}`;
-    const panel = `panel|${fullScreen}`;
+    const panel = `panel|${fullScreen}|${isSizedPanel()}`;
     if (activeTab === "Terminal") {
       return [
         panel,
