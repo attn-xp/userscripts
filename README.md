@@ -104,12 +104,14 @@ A developer overlay for Merchant Portal (`localhost:4200` and
   the complete token. Decoded JWT details include a live expiry countdown,
   issued time, user, subject, issuer, audience, and scopes when available.
 - **Cache** — collapsed `localStorage` and `sessionStorage` views with
-  grouped, syntax-coloured JSON. Every value has adjacent copy and inline edit
-  controls for primitive fields, while objects and arrays can be folded and
-  copied as a unit. Cache-entry timestamps (`updatedAt`, `iat`, `exp`,
-  `expires_at`, `expirationDate`, and the like) receive live-updating blue
-  relative-time annotations; payload dates such as `createdDate` are left
-  alone. Cache clearing and the local exclusions editor are included.
+  grouped, syntax-coloured JSON. The `<hnk>` or `<user>` segment of every
+  `xplor.*` key is highlighted in its own colour, so entries belonging to one
+  merchant or one user can be picked out at a glance. Every value has adjacent
+  copy and inline edit controls for primitive fields, while objects and arrays
+  can be folded and copied as a unit. Cache-entry timestamps (`updatedAt`,
+  `iat`, `exp`, `expires_at`, `expirationDate`, and the like) receive
+  live-updating blue relative-time annotations; payload dates such as
+  `createdDate` are left alone. Cache clearing and the local exclusions editor are included.
 - **NF** — enables, edits, adds, and removes Native Federation overrides,
   with the same validation and reload prompt as the standalone tool.
   Local URLs receive an informational server-status probe; a stopped server

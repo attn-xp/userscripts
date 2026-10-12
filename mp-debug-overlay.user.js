@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Merchant Portal Debug Overlay
 // @namespace    https://github.com/attn-xplor/userscripts
-// @version      2.4.0
+// @version      2.5.1
 // @description  Tabbed Merchant Portal tools for terminals, merchants, Okta, caches, module federation overrides, and the ngDevMode patch. Fully vibe-coded.
 // @author       Ismael J Lopez
 // @match        http://localhost:4200/ui/*
@@ -128,6 +128,15 @@
     { id: "overlay", label: "Debug Overlay", color: ORANGE },
   ];
 
+  // Every `xplor.*` cache key is scoped by an `<hnk>` or a `<user>`, and which
+  // one an entry belongs to matters more than the rest of the key, so each gets
+  // its own colour for the lifetime of the page.
+  const CACHE_USER_KEY = /^xplor\.(.+?)\.(?:current\.merchant|merchants)$/;
+  const CACHE_HNK_KEY = /^xplor\.(\d+)\./;
+  const IDENTITY_HUE_STEP_DEG = 137.5;
+  const IDENTITY_HUE_GAP_DEG = 35;
+  const cacheIdentityHues = new Map();
+
   // The page's own globals, not the userscript sandbox's copy of them.
   const pageWindow = typeof unsafeWindow === "undefined" ? window : unsafeWindow;
 
@@ -167,17 +176,35 @@
     }
   }
 
+  // UserService.username is the local-part of the Okta preferred_username,
+  // and that string is the `<user>` in `xplor.<user>.current.merchant`.
+  function portalUsername() {
+    const preferred = getAccessToken().session?.profile?.preferred_username;
+    if (typeof preferred !== "string") return null;
+    const name = preferred.split("@")[0];
+    return name || null;
+  }
+
   // `xplor.<user>.current.merchant` holds the merchant number the portal is
   // scoped to, which is the `<hnk>` segment of every other `xplor.*` cache key.
+  // Other logins leave their own key behind, and storage order is not "who is
+  // signed in", so the logged-in user's key is the one that counts.
   function currentMerchant() {
+    const user = portalUsername();
+    if (user) {
+      const hnk = localStorage.getItem(`xplor.${user}.current.merchant`);
+      return hnk ? { user, hnk } : null;
+    }
+
+    const matches = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       const match = CURRENT_MERCHANT_KEY.exec(key);
       if (!match) continue;
       const hnk = localStorage.getItem(key);
-      if (hnk) return { user: match[1], hnk };
+      if (hnk) matches.push({ user: match[1], hnk });
     }
-    return null;
+    return matches.length === 1 ? matches[0] : null;
   }
 
   // Switching merchants leaves the previous merchant's terminals behind in
@@ -201,8 +228,11 @@
     }
     if (entries.length === 0) return null;
 
+    const user = portalUsername();
     const hnk = currentMerchant()?.hnk;
-    if (hnk) return entries.find((entry) => entry.hnk === hnk) ?? null;
+    // A signed-in user with no terminals entry yet is empty. Falling through
+    // to the newest key would show some other login's merchant.
+    if (user || hnk) return entries.find((entry) => entry.hnk === hnk) ?? null;
     return entries.reduce((latest, entry) =>
       entry.updatedAt > latest.updatedAt ? entry : latest,
     );
@@ -1759,6 +1789,68 @@
     return CACHE_GROUPS[2];
   }
 
+  // The `<user>` segment is an email address, so its own dots make the segment
+  // boundary ambiguous; the two keys that always end in a known suffix are what
+  // the rest of a user's keys are recognised by.
+  function cacheUsers() {
+    const users = new Set();
+    for (const storage of [localStorage, sessionStorage])
+      for (let i = 0; i < storage.length; i++) {
+        const match = CACHE_USER_KEY.exec(storage.key(i) || "");
+        if (match) users.add(match[1]);
+      }
+    return users;
+  }
+
+  function cacheKeyIdentity(key, users) {
+    if (key.startsWith("xplor.debug.")) return null;
+    const hnk = CACHE_HNK_KEY.exec(key);
+    if (hnk) return hnk[1];
+    for (const user of users) if (key.startsWith(`xplor.${user}.`)) return user;
+    return null;
+  }
+
+  function cacheIdentityColor(value) {
+    let hue = cacheIdentityHues.get(value);
+    if (hue === undefined) {
+      hue = 0;
+      for (const char of value) hue = (hue * 31 + char.charCodeAt(0)) % 360;
+      // Two identities that hash next to each other would be hard to tell
+      // apart, so a collision steps around the wheel by the golden angle.
+      const taken = [...cacheIdentityHues.values()];
+      const tooClose = (other) =>
+        Math.min(Math.abs(other - hue), 360 - Math.abs(other - hue)) <
+        IDENTITY_HUE_GAP_DEG;
+      for (let i = 0; i < 8 && taken.some(tooClose); i++)
+        hue = (hue + IDENTITY_HUE_STEP_DEG) % 360;
+      cacheIdentityHues.set(value, hue);
+    }
+    return `hsl(${hue.toFixed(1)},85%,72%)`;
+  }
+
+  function appendCacheKey(target, key, color, users) {
+    const identity = cacheKeyIdentity(key, users);
+    const parts = identity
+      ? [
+          { text: "xplor.", color, dim: true },
+          { text: identity, color: cacheIdentityColor(identity) },
+          {
+            text: key.slice("xplor.".length + identity.length),
+            color,
+            dim: true,
+          },
+        ]
+      : [{ text: key, color }];
+    for (const part of parts) {
+      const span = document.createElement("span");
+      span.style.color = part.color;
+      if (part.dim) span.style.opacity = ".75";
+      else if (identity) span.style.fontWeight = "700";
+      span.textContent = part.text;
+      target.appendChild(span);
+    }
+  }
+
   function appendCacheGroupHeading(list, group, addRule) {
     if (addRule) {
       const rule = document.createElement("hr");
@@ -1800,6 +1892,7 @@
     ].join(";");
 
     const entries = new Map();
+    const users = cacheUsers();
     const populatedGroups = CACHE_GROUPS.map((group) => ({
       group,
       keys: keys.filter((key) => cacheGroupFor(key).id === group.id),
@@ -1810,13 +1903,11 @@
       const entry = document.createElement("details");
       const entrySummary = document.createElement("summary");
       entrySummary.style.cssText = "cursor:pointer;overflow-wrap:anywhere";
-      const name = document.createElement("span");
-      name.style.color = group.color;
-      name.textContent = key;
+      appendCacheKey(entrySummary, key, group.color, users);
       const hint = document.createElement("span");
       hint.style.opacity = ".55";
       hint.textContent = ` ${preview(storage.getItem(key))}`;
-      entrySummary.append(name, hint);
+      entrySummary.append(hint);
       const body = document.createElement("div");
       body.style.cssText =
         "margin:2px 0 4px;padding-left:12px;font:inherit;opacity:.9;overflow-wrap:anywhere";
